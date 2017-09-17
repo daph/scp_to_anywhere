@@ -11,4 +11,5 @@ To use, make a directory called ssh with host keys in it, put your slack token i
 Then you can scp like so: `scp -P8989 <file> localhost:<channel>`
 ex: `scp -P8989 ~/myimportantfile localhost:tools`
 
-![example](https://user-images.githubusercontent.com/151402/30525208-551e3714-9bb7-11e7-913a-d053514a0fca.gif)
+![example2](https://user-images.githubusercontent.com/151402/30525373-582b3260-9bba-11e7-9f10-d5d5f65200d5.gif)
+
