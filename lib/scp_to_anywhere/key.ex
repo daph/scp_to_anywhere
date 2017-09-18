@@ -20,15 +20,17 @@ defmodule ScpToAnywhere.Key do
 
   def is_auth_key(key, user, _opts) do
     user = List.to_string(user)
-    {_name, key_text} =
-      Application.get_env(:scp_to_anywhere, :users)
-      |> Enum.find(fn({u, _}) -> u == user end)
-
+    key_text = get_key(user)
     [{authkey, _}] = :public_key.ssh_decode(key_text, :public_key)
 
-    Logger.info("#{inspect key}")
-    Logger.info("#{inspect authkey}")
     is_allowed?(key, authkey)
+  end
+
+  def get_key(user) do
+    {_name, _pass, key} =
+      Application.get_env(:scp_to_anywhere, :users)
+      |> Enum.find(fn({u, _, _}) -> u == user end)
+    key
   end
 
   def is_allowed?(key, key), do: true
