@@ -11,7 +11,7 @@ defmodule ScpToAnywhere.SCP do
     {:ok, %{:chan => chan_id, :conn => conn_man}}
   end
 
-  def handle_ssh_msg({:ssh_cm, cm, {:data, chann_id, 0, data}}, state=%{in_request: true, length: length}) when length > 0 do
+  def handle_ssh_msg({:ssh_cm, cm, {:data, chan_id, 0, data}}, state=%{in_request: true, length: length}) when length > 0 do
     Logger.info("Getting data #{byte_size(data)}")
     data_size = byte_size(data)
     rest_length = length - data_size
@@ -22,7 +22,7 @@ defmodule ScpToAnywhere.SCP do
       << fixed_data :: binary-size(fixed_data_size), _leftover :: binary >> = data
       Slack.finish(state.ref, fixed_data)
       Logger.info("Done with transfer of #{state.file}")
-      :ssh_connection.send(cm, chann_id, <<0>>)
+      :ssh_connection.send(cm, chan_id, <<0>>)
       {:ok, %{state | in_request: false}}
     else
       Slack.send_part(state.ref, data)
@@ -30,7 +30,7 @@ defmodule ScpToAnywhere.SCP do
     end
   end
 
-  def handle_ssh_msg({:ssh_cm, cm, {:data, chann_id, 0, data}}, state=%{in_request: true}) do
+  def handle_ssh_msg({:ssh_cm, cm, {:data, chan_id, 0, data}}, state=%{in_request: true}) do
     Logger.info("Got data: #{inspect data}")
     <<command :: binary-size(1), _ :: binary>> = data
     case command do
@@ -41,7 +41,7 @@ defmodule ScpToAnywhere.SCP do
         Logger.info("Create file #{file}, length of #{length}, with mode #{mode}")
         ref = Slack.open_client()
         Slack.send_info(ref, Application.get_env(:scp_to_anywhere, :slack_token), state.dest, file)
-        :ssh_connection.send(cm, chann_id, <<0>>)
+        :ssh_connection.send(cm, chan_id, <<0>>)
         nstate =
           state
           |> Map.put(:length, length)
@@ -53,34 +53,36 @@ defmodule ScpToAnywhere.SCP do
       _ ->
         Logger.info("Other command #{inspect command}")
         Logger.info("Data: #{inspect data}")
+        :ssh_connection.close(cm, chan_id)
         {:ok, state}
     end
   end
 
-  def handle_ssh_msg({:ssh_cm, cm, {:eof, chann_id}}, state) do
+  def handle_ssh_msg({:ssh_cm, cm, {:eof, chan_id}}, state) do
     Logger.info("Got eof")
-    :ssh_connection.send(cm, chann_id, <<0>>)
-    :ssh_connection.close(cm, chann_id)
+    :ssh_connection.send(cm, chan_id, <<0>>)
+    :ssh_connection.close(cm, chan_id)
     {:ok, state}
   end
 
-  def handle_ssh_msg({:ssh_cm, cm, {:exec, chann_id, true, cmd}}, state) do
+  def handle_ssh_msg({:ssh_cm, cm, {:exec, chan_id, true, cmd}}, state) do
     Logger.info("Got exec: #{cmd}")
     command =
       cmd
       |> to_string()
       |> String.split()
     case command do
-      ["scp", "-t", dest] ->
-        :ssh_connection.send(cm, chann_id, <<0>>)
+      ["scp"|rest] ->
+        :ssh_connection.send(cm, chan_id, <<0>>)
+        dest = rest |> List.last()
         nstate =
           state
           |> Map.put(:in_request, true)
           |> Map.put(:dest, dest)
         {:ok, nstate}
       _ ->
-        :ssh_connection.send(cm, chann_id, "SCP ONLY")
-        :ssh_connection.close(cm, chann_id)
+        :ssh_connection.send(cm, chan_id, "SCP ONLY\n")
+        :ssh_connection.close(cm, chan_id)
         {:ok, state}
     end
   end
