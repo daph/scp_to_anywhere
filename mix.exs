@@ -22,7 +22,8 @@ defmodule ScpToAnywhere.Mixfile do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:hackney, "~> 1.9.0"}
+      {:hackney, "~> 1.9.0"},
+      {:distillery, "~> 1.4", runtime: false}
     ]
   end
 end
