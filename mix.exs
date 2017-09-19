@@ -23,7 +23,8 @@ defmodule ScpToAnywhere.Mixfile do
   defp deps do
     [
       {:hackney, "~> 1.9.0"},
-      {:distillery, "~> 1.4", runtime: false}
+      {:distillery, "~> 1.4", runtime: false},
+      {:dialyxir, "~> 0.5", only: [:dev], runtime: false}
     ]
   end
 end

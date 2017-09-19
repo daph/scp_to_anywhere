@@ -3,15 +3,37 @@ defmodule ScpToAnywhere.SCP do
   alias ScpToAnywhere.Slack
   require Logger
 
+  defstruct name: "",
+            length: 0,
+            mode: 0000,
+            dest: "",
+            command: "",
+            user: "",
+            in_session: false,
+            dclient: nil
+
+  @type t :: %__MODULE__{
+    name: String.t,
+    length: integer,
+    mode: integer,
+    dest: String.t,
+    command: String.t,
+    user: String.t,
+    in_session: boolean,
+    dclient: term
+  }
+
   def init([]) do
-    {:ok, %{}}
+    {:ok, %__MODULE__{}}
   end
 
-  def handle_msg({:ssh_channel_up, chan_id, conn_man}, _state) do
-    {:ok, %{:chan => chan_id, :conn => conn_man}}
+  def handle_msg({:ssh_channel_up, _chan_id, _conn_man}, _state) do
+    {:ok, %__MODULE__{}}
   end
 
-  def handle_ssh_msg({:ssh_cm, cm, {:data, chan_id, 0, data}}, state=%{in_request: true, length: length}) when length > 0 do
+  def handle_ssh_msg({:ssh_cm, cm, {:data, chan_id, 0, data}},
+                     state=%{in_session: true, length: length})
+  when length > 0 do
     Logger.debug("Getting data #{byte_size(data)}")
     data_size = byte_size(data)
     rest_length = length - data_size
@@ -20,17 +42,17 @@ defmodule ScpToAnywhere.SCP do
       # Ugly hack to remove the zero byte at the end of the data
       fixed_data_size = data_size - 1
       << fixed_data :: binary-size(fixed_data_size), _leftover :: binary >> = data
-      Slack.finish(state.ref, fixed_data)
-      Logger.info("Done with transfer of #{state.file}")
+      Slack.finish_file_xfer(state.dclient, fixed_data)
+      Logger.info("Done with transfer of #{state.name}")
       :ssh_connection.send(cm, chan_id, <<0>>)
-      {:ok, %{state | in_request: false}}
+      {:ok, %__MODULE__{state | in_session: false}}
     else
-      Slack.send_part(state.ref, data)
-      {:ok, %{state | length: rest_length}}
+      Slack.file_xfer_part(state.dclient, data)
+      {:ok, %__MODULE__{state | length: rest_length}}
     end
   end
 
-  def handle_ssh_msg({:ssh_cm, cm, {:data, chan_id, 0, data}}, state=%{in_request: true}) do
+  def handle_ssh_msg({:ssh_cm, cm, {:data, chan_id, 0, data}}, state=%__MODULE__{in_session: true}) do
     Logger.info("Got data: #{inspect data}")
     <<command :: binary-size(1), _ :: binary>> = data
     case command do
@@ -40,16 +62,13 @@ defmodule ScpToAnywhere.SCP do
         length = String.to_integer(length)
         file = String.trim(file)
         Logger.info("Create file #{file}, length of #{length}, with mode #{mode}")
-        ref = Slack.open_client()
-        Slack.send_info(ref, Application.get_env(:scp_to_anywhere, :slack_token), state.dest, file)
+        {:ok, dclient} = Slack.start_file_xfer(state.user, state.dest, file)
         :ssh_connection.send(cm, chan_id, <<0>>)
         nstate =
           state
           |> Map.put(:length, length)
-          |> Map.put(:og_length, length)
-          |> Map.put(:file, file)
-          |> Map.put(:data, <<>>)
-          |> Map.put(:ref, ref)
+          |> Map.put(:name, file)
+          |> Map.put(:dclient, dclient)
         {:ok, nstate}
       _ ->
         Logger.info("Other command #{inspect command}")
@@ -82,7 +101,7 @@ defmodule ScpToAnywhere.SCP do
         dest = rest |> List.last()
         nstate =
           state
-          |> Map.put(:in_request, true)
+          |> Map.put(:in_session, true)
           |> Map.put(:dest, dest)
           |> Map.put(:user, user)
         {:ok, nstate}
