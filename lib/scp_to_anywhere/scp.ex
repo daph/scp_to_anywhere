@@ -35,7 +35,8 @@ defmodule ScpToAnywhere.SCP do
     <<command :: binary-size(1), _ :: binary>> = data
     case command do
       "C" ->
-        [<<_ :: 8, mode :: binary>>, length, file] = String.split(data)
+        [<<_ :: 8, mode :: binary>>, length|file] = String.split(data)
+        file = file |> Enum.join(" ")
         length = String.to_integer(length)
         file = String.trim(file)
         Logger.info("Create file #{file}, length of #{length}, with mode #{mode}")
