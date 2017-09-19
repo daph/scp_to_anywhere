@@ -12,7 +12,7 @@ defmodule ScpToAnywhere.SCP do
   end
 
   def handle_ssh_msg({:ssh_cm, cm, {:data, chan_id, 0, data}}, state=%{in_request: true, length: length}) when length > 0 do
-    Logger.info("Getting data #{byte_size(data)}")
+    Logger.debug("Getting data #{byte_size(data)}")
     data_size = byte_size(data)
     rest_length = length - data_size
 
@@ -60,14 +60,18 @@ defmodule ScpToAnywhere.SCP do
   end
 
   def handle_ssh_msg({:ssh_cm, cm, {:eof, chan_id}}, state) do
-    Logger.info("Got eof")
+    Logger.debug("Got eof")
     :ssh_connection.send(cm, chan_id, <<0>>)
     :ssh_connection.close(cm, chan_id)
     {:ok, state}
   end
 
   def handle_ssh_msg({:ssh_cm, cm, {:exec, chan_id, true, cmd}}, state) do
-    Logger.info("Got exec: #{cmd}")
+    user =
+      :ssh.connection_info(cm, [:user])
+      |> Keyword.get(:user)
+      |> to_string()
+    Logger.info("Got exec: #{cmd} from user: #{user}")
     command =
       cmd
       |> to_string()
@@ -80,6 +84,7 @@ defmodule ScpToAnywhere.SCP do
           state
           |> Map.put(:in_request, true)
           |> Map.put(:dest, dest)
+          |> Map.put(:user, user)
         {:ok, nstate}
       _ ->
         :ssh_connection.send(cm, chan_id, "SCP ONLY\n")
