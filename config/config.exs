@@ -30,5 +30,8 @@ config :logger, level: :info
 #     import_config "#{Mix.env}.exs"
 #
 
+config :scp_to_anywhere,
+  port: 8989
+
 import_config "secrets.exs"
 

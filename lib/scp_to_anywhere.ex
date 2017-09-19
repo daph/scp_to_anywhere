@@ -2,7 +2,8 @@ defmodule ScpToAnywhere do
   use Application
 
   def start(_type, _args) do
-    :ssh.daemon(8989, [system_dir: './ssh',
+    port = Application.get_env(:scp_to_anywhere, :port)
+    :ssh.daemon(port, [system_dir: './ssh',
                        ssh_cli: {ScpToAnywhere.SCP, []},
                        subsystems: [],
                        key_cb: ScpToAnywhere.Key,
