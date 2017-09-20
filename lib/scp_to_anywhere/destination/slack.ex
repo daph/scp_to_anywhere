@@ -4,15 +4,13 @@ defmodule ScpToAnywhere.Destination.Slack do
 
   @spec start_file_xfer(String.t, String.t, String.t) :: {:ok, term} | {:error, term}
   def start_file_xfer(user, dest, filename) do
-    # ex: <team>/channel/<channel name>
-    # TODO support also sending to users
-
+    # ex: slack/<team>/<channel name>
     path =
       dest
       |> String.trim_leading("/")
       |> Path.split()
     case path do
-      [_, team, "channel", chname] ->
+      [_, team, chname] ->
         {:ok, token} = get_slack_token(user, team)
         {:ok, ref} = :hackney.request(:post, "https://slack.com/api/files.upload", [], :stream_multipart, [])
         start_multipart(ref, token, chname, filename)
