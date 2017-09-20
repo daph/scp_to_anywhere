@@ -74,16 +74,14 @@ defmodule ScpToAnywhere.SCP do
       _ ->
         Logger.info("Other command #{inspect command}")
         Logger.info("Data: #{inspect data}")
-        :ssh_connection.close(cm, chan_id)
-        {:ok, state}
+        {:stop, chan_id, state}
     end
   end
 
   def handle_ssh_msg({:ssh_cm, cm, {:eof, chan_id}}, state) do
     Logger.debug("Got eof")
     :ssh_connection.send(cm, chan_id, <<0>>)
-    :ssh_connection.close(cm, chan_id)
-    {:ok, state}
+    {:stop, chan_id, state}
   end
 
   def handle_ssh_msg({:ssh_cm, cm, {:exec, chan_id, true, cmd}}, state) do
@@ -108,10 +106,12 @@ defmodule ScpToAnywhere.SCP do
           |> Map.put(:dest, dest)
           |> Map.put(:user, user)
         {:ok, nstate}
+      ["ls", "-d1FL", "--", _pattern] ->
+        :ssh_connection.send(cm, chan_id, <<>>)
+        {:stop, chan_id, state}
       _ ->
         :ssh_connection.send(cm, chan_id, "SCP ONLY\n")
-        :ssh_connection.close(cm, chan_id)
-        {:ok, state}
+        {:stop, chan_id, state}
     end
   end
 
