@@ -31,7 +31,8 @@ config :logger, level: :info
 #
 
 config :scp_to_anywhere,
-  port: 8989
+  port: 8989,
+  destinations: [slack: ScpToAnywhere.Destination.Slack]
 
 import_config "secrets.exs"
 

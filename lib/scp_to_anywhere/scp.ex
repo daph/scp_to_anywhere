@@ -1,26 +1,27 @@
 defmodule ScpToAnywhere.SCP do
   @behaviour :ssh_daemon_channel
-  alias ScpToAnywhere.Slack
   require Logger
 
   defstruct name: "",
             length: 0,
             mode: 0000,
-            dest: "",
+            file_dest: "",
             command: "",
             user: "",
             in_session: false,
-            dclient: nil
+            dclient: nil,
+            dest: nil
 
   @type t :: %__MODULE__{
     name: String.t,
     length: integer,
     mode: integer,
-    dest: String.t,
+    file_dest: String.t,
     command: String.t,
     user: String.t,
     in_session: boolean,
-    dclient: term
+    dclient: term,
+    dest: atom
   }
 
   def init([]) do
@@ -42,12 +43,12 @@ defmodule ScpToAnywhere.SCP do
       # Ugly hack to remove the zero byte at the end of the data
       fixed_data_size = data_size - 1
       << fixed_data :: binary-size(fixed_data_size), _leftover :: binary >> = data
-      Slack.finish_file_xfer(state.dclient, fixed_data)
+      state.dest.finish_file_xfer(state.dclient, fixed_data)
       Logger.info("Done with transfer of #{state.name}")
       :ssh_connection.send(cm, chan_id, <<0>>)
       {:ok, %__MODULE__{state | in_session: false}}
     else
-      Slack.file_xfer_part(state.dclient, data)
+      state.dest.file_xfer_part(state.dclient, data)
       {:ok, %__MODULE__{state | length: rest_length}}
     end
   end
@@ -62,7 +63,7 @@ defmodule ScpToAnywhere.SCP do
         length = String.to_integer(length)
         file = String.trim(file)
         Logger.info("Create file #{file}, length of #{length}, with mode #{mode}")
-        {:ok, dclient} = Slack.start_file_xfer(state.user, state.dest, file)
+        {:ok, dclient} = state.dest.start_file_xfer(state.user, state.file_dest, file)
         :ssh_connection.send(cm, chan_id, <<0>>)
         nstate =
           state
@@ -98,10 +99,12 @@ defmodule ScpToAnywhere.SCP do
     case command do
       ["scp"|rest] ->
         :ssh_connection.send(cm, chan_id, <<0>>)
-        dest = rest |> List.last()
+        file_dest = rest |> List.last()
+        dest = get_destination(file_dest)
         nstate =
           state
           |> Map.put(:in_session, true)
+          |> Map.put(:file_dest, file_dest)
           |> Map.put(:dest, dest)
           |> Map.put(:user, user)
         {:ok, nstate}
@@ -119,5 +122,15 @@ defmodule ScpToAnywhere.SCP do
 
   def terminate(_reason, _state) do
     :ok
+  end
+
+
+  defp get_destination(file_dest) do
+    file_dest
+    |> String.trim_leading("/")
+    |> Path.split()
+    |> List.first
+    |> String.to_existing_atom()
+    |> (&(Application.get_env(:scp_to_anywhere, :destinations) |> Keyword.get(&1))).()
   end
 end
